@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "@jimp/core": "^1.6.0",
+    "@jimp/js-jpeg": "^1.6.0",
+    "@jimp/plugin-resize": "^1.6.0",
+    "@jimp/utils": "^1.6.0",
+    "jimp": "^1.6.0"
+  }
+}
