@@ -5,5 +5,8 @@
     "@jimp/plugin-resize": "^1.6.0",
     "@jimp/utils": "^1.6.0",
     "jimp": "^1.6.0"
+  },
+  "devDependencies": {
+    "prettier": "3.4.2"
   }
 }
