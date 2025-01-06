@@ -86,15 +86,104 @@ function getGraphPath(endPoint, distances) {
 
 function cutGraph(graph, path) {
   const newGraph = structuredClone(graph);
+  let prev;
 
   path.forEach(nodeToRemove => {
     delete newGraph[nodeToRemove];
     Object.keys(newGraph).forEach((prop) => {
       delete newGraph[prop][nodeToRemove];
     });
+
+    if (prev) {
+      let prevNums = prev.split("_");
+      let curNums = nodeToRemove.split("_");
+      if (prevNums[0] !== curNums[0] && prevNums[1] !== curNums[1]) {
+        let adj1 = `${prevNums[0]}_${curNums[1]}`;
+        let adj2 = `${curNums[0]}_${prevNums[1]}`;
+
+        delete newGraph[adj1][adj2];
+        delete newGraph[adj2][adj1];
+      }
+    }
+
+    prev = nodeToRemove;
   });
 
   return newGraph;
 }
 
-module.exports = { dijkstra, getGraphPath, cutGraph };
+function getOriginalSegmentBorder(cutType, startPoint, endPoint, middle) {
+  const startCoords = startPoint.split("_");
+  startCoords[0] = parseInt(startCoords[0], 10);
+  startCoords[1] = parseInt(startCoords[1], 10);
+  const endCoords = endPoint.split("_");
+  endCoords[0] = parseInt(endCoords[0], 10);
+  endCoords[1] = parseInt(endCoords[1], 10);
+
+  const segment = new Set();
+
+  const verticalEdge = (startRow, endRow, col) => {
+    for (let ii = startRow; ii <= endRow; ii++) {
+      segment.add(`${ii}_${col}`);
+    }
+  };
+
+  const horizontalEdge = (startCol, endCol, row) => {
+    for (let ii = startCol; ii <= endCol; ii++) {
+      segment.add(`${row}_${ii}`);
+    }
+  };
+
+  if (cutType === "h") {
+    horizontalEdge(0, startCoords[1] - 1, 0); // top edge
+    verticalEdge(0, endCoords[0], 0); // left edge
+    horizontalEdge(0, endCoords[1] - 1, 0); // bottom edge
+  } else if (cutType === "v") {
+    verticalEdge(0, startCoords[0], 0); // left edge
+    horizontalEdge(0, endCoords[1] - 1, 0); // top edge
+    verticalEdge(0, endCoords[0], 0); // right edge
+  } else if (cutType === "b") {
+    horizontalEdge(0, startCoords[1] - 1, startCoords[0]); // bottom edge
+    verticalEdge(0, startCoords[0], 0); // left edge
+    horizontalEdge(0, endCoords[1], 0); // top edge
+    verticalEdge(0, endCoords[0] - 1, endCoords[1]); // right edge
+  }
+
+  return Array.from(segment);
+}
+
+/**
+ * This takes in a dijstra graph that will have nodes that are reachable and unreachable.
+ * Give an input set of "nodes", it will return the part of the dijstraGraph that
+ * is related to those nodes.
+ *
+ * @param dijstraGraph
+ * @param nodes
+ */
+function getOriginalSegmentNodes(dijstraGraph, nodes) {
+  const infinityNodes = [];
+  const finiteNodes = [];
+
+  Object.keys(dijstraGraph).forEach(key => {
+    if (isFinite(dijstraGraph[key].dist)) {
+      finiteNodes.push(key);
+    } else {
+      infinityNodes.push(key);
+    }
+  });
+
+  for (let ii = 0; ii < nodes.length; ii++) {
+    let node = nodes[ii];
+    if (dijstraGraph[node]) {
+      if (isFinite(dijstraGraph[node].dist)) {
+        return finiteNodes;
+      } else {
+        return infinityNodes;
+      }
+    }
+  }
+
+  return []; // all original segment nodes must be along the cut
+}
+
+module.exports = { dijkstra, getGraphPath, cutGraph, getOriginalSegmentBorder, getOriginalSegmentNodes };
