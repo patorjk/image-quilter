@@ -91,11 +91,9 @@ function createOverlapMask({ cutType, blockSize, overlap }) {
  * @param xOffset
  * @param yOffset
  * @param blockSize
- * @param overlap
- * @param cutType
  * @returns {{image, yOffset, xOffset, size, getPixelColor: (function(*, *): RGBAColor)}}
  */
-function createBlock(inputImage, xOffset, yOffset, blockSize, overlap, cutType = null) {
+function createBlock(inputImage, xOffset, yOffset, blockSize) {
   return {
     xOffset,
     yOffset,
@@ -139,7 +137,7 @@ function getBlockOffsets({ inputImage, blockSize, count = 50 }) {
   return ret;
 }
 
-function getBlock({ blockSet, inputImage, row, col, blockSize, overlap, outputImage }) {
+function getBlock({ blockSet, row, col, blockSize, overlap, outputImage }) {
   // if we're at the top corner, nothing has been made yet so any block will work
   if (row === 0 && col === 0) return blockSet[0];
 
@@ -259,21 +257,31 @@ function placeBlock({ block, outputImage, row, col, overlap, blockSize, showSeam
   }
 }
 
-async function constructImage({ inputImageFile, outputImage, blockSize, overlap, showSeam }) {
+async function constructImage({ inputImageFile, outputImage, blockSize, overlap, showSeam, gridPresets }) {
   const inputImage = await Jimp.read(inputImageFile);
   const gridBlockSize = blockSize - overlap;
   const gridWidth = Math.ceil(outputImage.bitmap.width / gridBlockSize);
   const gridHeight = Math.ceil(outputImage.bitmap.height / gridBlockSize);
 
+  const grid = [];
+
   for (let col = 0; col < gridWidth; col++) {
+    grid[col] = [];
     for (let row = 0; row < gridHeight; row++) {
       const blockSet = getBlockOffsets({ inputImage, blockSize });
-      const block = getBlock({ blockSet, inputImage, row, col, overlap, blockSize, outputImage });
+      let block;
+      if (gridPresets && gridPresets[col] && gridPresets[col][row]) {
+        block = createBlock(inputImage, gridPresets[col][row].xOffset, gridPresets[col][row].yOffset, blockSize);
+      } else {
+        block = getBlock({ blockSet, row, col, overlap, blockSize, outputImage });
+      }
       placeBlock({ block, inputImage, outputImage, row, col, blockSize, overlap, showSeam });
+
+      grid[col][row] = { xOffset: block.xOffset, yOffset: block.yOffset };
     }
   }
 
-  return outputImage;
+  return { outputImage, grid };
 }
 
 module.exports = { constructImage };
