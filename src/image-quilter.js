@@ -3,14 +3,14 @@ const { intToRGBA, rgbaToInt } = require("@jimp/utils");
 const { dijkstra, getGraphPath, cutGraph, getOriginalSegmentBorder, getOriginalSegmentNodes } = require("./dijkstra");
 
 
-function createOverlapGraph(outputImage, xOffset, yOffset, block) {
+function createOverlapGraph(outputImage, xOffset, yOffset, block, overlapMask) {
 
   const graph = {};
   const weights = {};
 
   for (let row = 0; row < block.size; row++) {
     for (let col = 0; col < block.size; col++) {
-      if (block.mask[row][col] !== 0) {
+      if (overlapMask[row][col] !== 0) {
         const color1 = intToRGBA(outputImage.getPixelColor(col + xOffset, row + yOffset));
         const color2 = block.getPixelColor(col, row);
         const diff = Math.abs(color1.r - color2.r) + Math.abs(color1.g - color2.g) + Math.abs(color1.b - color2.b);
@@ -60,7 +60,16 @@ function createMask({ blockSize, vVisible = 0, hVisible = 0 }) {
   return mask;
 }
 
-function createMaskForBlock({ cutType, blockSize, overlap }) {
+/**
+ * Creates an overlap max (matrix of 0's and 1's) which indicates which pixels
+ * of a block will be overlapping with the existing image.
+ *
+ * @param cutType
+ * @param blockSize
+ * @param overlap
+ * @returns {*[]}
+ */
+function createOverlapMask({ cutType, blockSize, overlap }) {
   // if we're at the start of a new row, only the top overlaps
   let mask;
   if (cutType === "v") {
@@ -84,7 +93,7 @@ function createMaskForBlock({ cutType, blockSize, overlap }) {
  * @param blockSize
  * @param overlap
  * @param cutType
- * @returns {{image, yOffset, xOffset, size, getPixelColor: (function(*, *): RGBAColor), mask: (*[]|*[])}}
+ * @returns {{image, yOffset, xOffset, size, getPixelColor: (function(*, *): RGBAColor)}}
  */
 function createBlock(inputImage, xOffset, yOffset, blockSize, overlap, cutType = null) {
   return {
@@ -92,20 +101,19 @@ function createBlock(inputImage, xOffset, yOffset, blockSize, overlap, cutType =
     yOffset,
     size: blockSize,
     image: inputImage,
-    mask: createMaskForBlock({ cutType, blockSize, overlap }),
     getPixelColor: (x, y) => {
       return intToRGBA(inputImage.getPixelColor(xOffset + x, yOffset + y));
     }
   };
 }
 
-function sumOfSquaredDifferences(block1, block2) {
+function sumOfSquaredDifferences(block1, block2, overlapMask) {
   if (block1.size !== block2.size) throw new Error("Invalid block comparison");
 
   let ssd = 0;
   for (let row = 0; row < block1.size; row++) {
     for (let col = 0; col < block1.size; col++) {
-      if (block1.mask[row][col] !== 0 && block2.mask[row][col] !== 0) {
+      if (overlapMask[row][col] !== 0) {
         const color1 = block1.getPixelColor(col, row);
         const color2 = block2.getPixelColor(col, row);
         const diff = Math.abs(color1.r - color2.r) + Math.abs(color1.g - color2.g) + Math.abs(color1.b - color2.b);
@@ -138,11 +146,12 @@ function getBlock({ blockSet, inputImage, row, col, blockSize, overlap, outputIm
   // if we're at the start of a new row, only the top overlaps
   let cutType = row === 0 ? "h" : (col === 0) ? "v" : "b";
   const outputAreaBlock = createBlock(outputImage, (blockSize - overlap) * col, (blockSize - overlap) * row, blockSize, overlap, cutType);
+  const overlapMask = createOverlapMask({ cutType, blockSize: outputAreaBlock.size, overlap });
 
   let bestBlockSet = blockSet[0];
   let bestSsd = -1;
   blockSet.forEach(block => {
-    let ssd = sumOfSquaredDifferences(block, outputAreaBlock);
+    let ssd = sumOfSquaredDifferences(block, outputAreaBlock, overlapMask);
     if (bestSsd === -1 || ssd < bestSsd) {
       bestSsd = ssd;
       bestBlockSet = block;
@@ -158,8 +167,7 @@ function getCutSegments({ block, blockSize, overlap, outputImage, row, col }) {
   // if we're not doing a cut, just return
   if (cutType === null) return {};
 
-  const newMask = createMaskForBlock({ cutType, blockSize: block.size, overlap });
-  block.mask = newMask;
+  const overlapMask = createOverlapMask({ cutType, blockSize: block.size, overlap });
 
   let startPoint, endPoint, middle = Math.floor(overlap / 2);
   if (cutType === "h") {
@@ -173,13 +181,11 @@ function getCutSegments({ block, blockSize, overlap, outputImage, row, col }) {
     endPoint = `${middle}_${blockSize - 1}`;
   }
 
-  //console.log(startPoint, endPoint, middle);
-
   // These are nodes that will either be on the cut, or in the original segment
   const origNodes = getOriginalSegmentBorder(cutType, startPoint, endPoint, middle);
 
 
-  const graph = createOverlapGraph(outputImage, (blockSize - overlap) * col, (blockSize - overlap) * row, block);
+  const graph = createOverlapGraph(outputImage, (blockSize - overlap) * col, (blockSize - overlap) * row, block, overlapMask);
   const paths = dijkstra(graph, startPoint);
   const cut = getGraphPath(endPoint, paths);
   let originalSegment = [];
@@ -220,7 +226,7 @@ function getCutSegments({ block, blockSize, overlap, outputImage, row, col }) {
   };
 }
 
-function placeBlock({ block, outputImage, row, col, overlap, blockSize, showSeam = true }) {
+function placeBlock({ block, outputImage, row, col, overlap, blockSize, showSeam = false }) {
   const gridBlockSize = blockSize - overlap;
   const { originalSegment = [], cut = [] } = getCutSegments({ block, blockSize, overlap, outputImage, row, col });
 
@@ -253,7 +259,7 @@ function placeBlock({ block, outputImage, row, col, overlap, blockSize, showSeam
   }
 }
 
-async function constructImage({ inputImageFile, outputImage, blockSize, overlap }) {
+async function constructImage({ inputImageFile, outputImage, blockSize, overlap, showSeam }) {
   const inputImage = await Jimp.read(inputImageFile);
   const gridBlockSize = blockSize - overlap;
   const gridWidth = Math.ceil(outputImage.bitmap.width / gridBlockSize);
@@ -263,11 +269,11 @@ async function constructImage({ inputImageFile, outputImage, blockSize, overlap 
     for (let row = 0; row < gridHeight; row++) {
       const blockSet = getBlockOffsets({ inputImage, blockSize });
       const block = getBlock({ blockSet, inputImage, row, col, overlap, blockSize, outputImage });
-      placeBlock({ block, inputImage, outputImage, row, col, blockSize, overlap });
+      placeBlock({ block, inputImage, outputImage, row, col, blockSize, overlap, showSeam });
     }
   }
 
-  await outputImage.write("output.jpg");
+  return outputImage;
 }
 
 module.exports = { constructImage };
