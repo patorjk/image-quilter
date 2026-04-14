@@ -1,4 +1,15 @@
 {
+  "name": "image-quilter",
+  "version": "1.0.0",
+  "description": "Image quilting for texture synthesis and the pause illusion",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "quilt": "node index.js",
+    "illusion": "node illusion.js"
+  },
   "dependencies": {
     "@jimp/core": "^1.6.0",
     "@jimp/js-jpeg": "^1.6.0",
