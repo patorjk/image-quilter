@@ -4,10 +4,10 @@ A Node.js implementation of the [Image Quilting for Texture Synthesis and Transf
 
 This repo contains two scripts:
 
-- **`index.js`** — generates a seamlessly tiled texture by quilting together patches from a source image
-- **`illusion.js`** — generates animation frames for Persistence of Vision illusion where the image will disappear when the video is paused.
+- **`index.js`**: Generates a seamlessly tiled texture by quilting together patches from a source image.
+- **`illusion.js`**: Generates animation frames for a persistence of vision (POV) illusion where the image will disappear when the video is paused.
 
-The illusion is demonstrated in [this YouTube video]([https://youtu.be/TODO](https://www.youtube.com/watch?v=ZqGfb_Vlrig)).
+The illusion is demonstrated in [this YouTube video](https://www.youtube.com/watch?v=ZqGfb_Vlrig).
 
 ---
 
